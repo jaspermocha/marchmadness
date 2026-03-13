@@ -14,6 +14,20 @@ FULLY AUTOMATED MODE (recommended)
   Requires: ODDS_API_KEY=your_key in .env (see .env.example)
             Sign up free at https://the-odds-api.com
 
+CONFERENCE TOURNAMENT MODE
+---------------------------
+  python main.py --conf                     # all conf tournaments (next 7 days)
+  python main.py --conf --conf-name "ACC"   # specific conference
+  python main.py --conf --days 14           # look 14 days ahead
+  python main.py --conf --no-odds           # predictions only, no odds key needed
+
+  Works exactly like --auto but for conference tournaments.
+  Since conf tournaments are on neutral courts, the model applies directly.
+
+  Supported --conf-name values:
+    ACC, Big Ten, Big 12, SEC, Big East, Pac-12, A-10,
+    Mountain West, WCC, American, MVC, MAC, and more.
+
 MANUAL / SAMPLE MODE
 ---------------------
   python main.py --setup          # generate sample teams.csv + lines.csv
@@ -22,6 +36,9 @@ MANUAL / SAMPLE MODE
 OTHER FLAGS
 -----------
   --auto                   Fully automated: scrape stats + live odds
+  --conf                   Conference tournament mode
+  --conf-name "ACC"        Filter to a specific conference
+  --days 7                 Days ahead to look for games (conf mode)
   --auto --no-odds         Auto stats only (no odds API needed)
   --simulate --sims 20000  Monte Carlo simulation
   --bracket                Deterministic bracket prediction
@@ -224,8 +241,20 @@ def main() -> None:
         help="Fully automated: scrape Barttorvik + NCAA bracket + live odds",
     )
     parser.add_argument(
+        "--conf", action="store_true",
+        help="Conference tournament mode: fetch upcoming conf tourney games + predict",
+    )
+    parser.add_argument(
+        "--conf-name", type=str, default=None, metavar="CONF",
+        help="Filter conf tournament mode to a specific conference (e.g. 'ACC', 'SEC')",
+    )
+    parser.add_argument(
+        "--days", type=int, default=7,
+        help="Days ahead to look for conference tournament games (default: 7)",
+    )
+    parser.add_argument(
         "--no-odds", action="store_true",
-        help="Skip odds fetching in --auto mode (no API key needed)",
+        help="Skip odds fetching (no API key needed)",
     )
     parser.add_argument(
         "--setup", action="store_true",
@@ -271,7 +300,34 @@ def main() -> None:
     print("  Model ready.\n")
 
     # ------------------------------------------------------------------
-    # AUTO MODE
+    # CONFERENCE TOURNAMENT MODE
+    # ------------------------------------------------------------------
+    if args.conf:
+        from conf_tournament import run_conf_analysis, CONF_GROUP_IDS
+        conf_name = args.conf_name
+        if conf_name and conf_name not in CONF_GROUP_IDS:
+            # Case-insensitive lookup
+            match = next(
+                (k for k in CONF_GROUP_IDS if k.lower() == conf_name.lower()), None
+            )
+            if match:
+                conf_name = match
+            else:
+                valid = ", ".join(sorted(CONF_GROUP_IDS.keys()))
+                print(f"Unknown conference '{conf_name}'.\nValid options: {valid}")
+                sys.exit(1)
+
+        run_conf_analysis(
+            model=model,
+            conf_name=conf_name,
+            days_ahead=args.days,
+            min_edge=args.edge,
+            fetch_odds=not args.no_odds,
+        )
+        return
+
+    # ------------------------------------------------------------------
+    # AUTO MODE (March Madness)
     # ------------------------------------------------------------------
     if args.auto:
         run_auto(args, model)
