@@ -268,6 +268,20 @@ def main() -> None:
     parser.add_argument("--lines", type=str, default=None)
     parser.add_argument("--importance", action="store_true")
     parser.add_argument("--total", nargs=2, metavar=("TEAM_A", "TEAM_B"))
+    parser.add_argument(
+        "--backtest", action="store_true",
+        help="Backtest model against completed games this season",
+    )
+    parser.add_argument(
+        "--backtest-type", type=str, default="neutral",
+        choices=["all", "neutral", "conf_tourney", "postseason"],
+        metavar="TYPE",
+        help="Game type to backtest: all | neutral | conf_tourney | postseason (default: neutral)",
+    )
+    parser.add_argument(
+        "--time-machine", action="store_true",
+        help="Use Barttorvik date snapshots for backtest (no lookahead bias, slower)",
+    )
 
     # Options
     parser.add_argument("--teams-csv", type=str, default="teams.csv")
@@ -298,6 +312,48 @@ def main() -> None:
     print("Loading model...")
     model = get_or_train_model()
     print("  Model ready.\n")
+
+    # ------------------------------------------------------------------
+    # BACKTEST MODE
+    # ------------------------------------------------------------------
+    if args.backtest:
+        from backtest import (
+            fetch_season_games, run_backtest, compute_metrics, print_backtest_report
+        )
+        from scraper import fetch_barttorvik_ratings
+
+        year = args.year or date.today().year
+        game_type = args.backtest_type
+        use_tm = args.time_machine
+
+        print(f"\nFetching {game_type} game results for {year} season...")
+        if use_tm:
+            print("  Using Barttorvik time-machine snapshots (no lookahead bias).")
+        else:
+            print("  Using current season stats (slight lookahead bias).")
+            print("  Add --time-machine for cleaner results.\n")
+
+        games_df = fetch_season_games(year=year, game_type=game_type)
+        if games_df.empty:
+            print(
+                "No completed games found. The season may not have started yet, "
+                "or the ESPN API returned no results."
+            )
+            return
+
+        print(f"Fetching Barttorvik stats for {year}...")
+        stats_df = fetch_barttorvik_ratings(year)
+
+        results_df = run_backtest(
+            games_df, model, stats_df, use_time_machine=use_tm
+        )
+        if results_df.empty:
+            print("No games could be evaluated (team name matching failed).")
+            return
+
+        metrics = compute_metrics(results_df)
+        print_backtest_report(results_df, metrics, game_type, use_tm)
+        return
 
     # ------------------------------------------------------------------
     # CONFERENCE TOURNAMENT MODE
