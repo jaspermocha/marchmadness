@@ -989,38 +989,58 @@ def print_full_market_rankings(num_qbs: int = 2, ppr: float = 1.0, top_n: int = 
     """Print top N players from FantasyCalc with our model value side-by-side."""
     print(f"\nFetching top {top_n} dynasty players from FantasyCalc...")
     fc_data = fetch_fantasycalc_values(num_qbs=num_qbs, ppr=ppr)
-    if not fc_data:
-        print("  Could not retrieve FantasyCalc data.")
-        return
 
-    rows = []
-    for entry in sorted(fc_data, key=lambda e: e.get("overall_rank") or 9999)[:top_n]:
-        if entry["position"] not in ("QB", "RB", "WR", "TE"):
-            continue
-        fc_name = entry["name"].lower().strip()
-        player = PLAYER_DB.get(fc_name)
-        if not player:
-            matches = [p for k, p in PLAYER_DB.items() if fc_name in k or k in fc_name]
-            player = matches[0] if len(matches) == 1 else None
+    if fc_data:
+        rows = []
+        for entry in sorted(fc_data, key=lambda e: e.get("overall_rank") or 9999)[:top_n]:
+            if entry["position"] not in ("QB", "RB", "WR", "TE"):
+                continue
+            fc_name = entry["name"].lower().strip()
+            player = PLAYER_DB.get(fc_name)
+            if not player:
+                matches = [p for k, p in PLAYER_DB.items() if fc_name in k or k in fc_name]
+                player = matches[0] if len(matches) == 1 else None
 
-        model_val = player.adjusted_value(league_format) if player else "—"
-        age = player.age if player else (entry.get("age") or "?")
-        adp = entry.get("adp")
+            model_val = player.adjusted_value(league_format) if player else "—"
+            age = player.age if player else (entry.get("age") or "?")
+            adp = entry.get("adp")
 
-        rows.append([
-            entry.get("overall_rank", "?"),
-            entry["name"],
-            entry["position"],
-            age,
-            entry.get("value", 0),
-            model_val,
-            f"{adp:.1f}" if adp else "—",
-        ])
+            rows.append([
+                entry.get("overall_rank", "?"),
+                entry["name"],
+                entry["position"],
+                age,
+                entry.get("value", 0),
+                model_val,
+                f"{adp:.1f}" if adp else "—",
+            ])
 
-    headers = ["Rank", "Player", "Pos", "Age", "FC Value", "Model Val", "ADP"]
-    print("\n" + "═" * 70)
-    print(f"  TOP {top_n} DYNASTY PLAYERS — FantasyCalc + Model Comparison")
-    print("═" * 70)
+        headers = ["Rank", "Player", "Pos", "Age", "FC Value", "Model Val", "ADP"]
+        print("\n" + "═" * 70)
+        print(f"  TOP {top_n} DYNASTY PLAYERS — FantasyCalc + Model Comparison")
+        print("═" * 70)
+    else:
+        print("  FantasyCalc unavailable — showing internal model rankings.")
+        sorted_players = sorted(PLAYER_DB.values(),
+                                key=lambda p: p.adjusted_value(league_format),
+                                reverse=True)[:top_n]
+        rows = []
+        for i, p in enumerate(sorted_players, 1):
+            peak_yrs, total_yrs = p.buy_window()
+            rows.append([
+                i,
+                p.name,
+                p.position,
+                int(p.age),
+                "—",
+                p.adjusted_value(league_format),
+                f"~{peak_yrs}yr/{total_yrs}yr",
+            ])
+        headers = ["Rank", "Player", "Pos", "Age", "FC Value", "Model Val", "Window"]
+        print("\n" + "═" * 70)
+        print(f"  TOP {top_n} DYNASTY PLAYERS — Internal Model ({league_format}, {'PPR' if ppr == 1 else 'Half'})")
+        print("═" * 70)
+
     try:
         from tabulate import tabulate
         print(tabulate(rows, headers=headers, tablefmt="rounded_outline"))
