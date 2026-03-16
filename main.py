@@ -1,6 +1,19 @@
 #!/usr/bin/env python3
 """
-main.py — March Madness Betting Model CLI
+main.py — March Madness Betting Model + Dynasty Trade Analyzer CLI
+
+DYNASTY TRADE ANALYZER
+-----------------------
+  python main.py --dynasty                          # Interactive mode
+  python main.py --dynasty --market                 # Market report: buy/sell targets vs FantasyCalc
+  python main.py --dynasty --market --num-qbs 2     # 2QB league market report
+  python main.py --dynasty --rankings               # Top 50 FantasyCalc + model comparison
+  python main.py --dynasty --trade "CeeDee Lamb, 2026 1st" "Ja'Marr Chase"
+  python main.py --dynasty --roster my_roster.csv   # Roster analysis + trade recs
+
+  Fetches live dynasty values and ADP from FantasyCalc.com to surface
+  undervalued / overvalued players. Also evaluates trade fairness using
+  age curves, positional scarcity, and adjusted dynasty values.
 
 FULLY AUTOMATED MODE (recommended)
 ------------------------------------
@@ -235,6 +248,41 @@ def main() -> None:
         epilog=__doc__,
     )
 
+    # ---- Dynasty Trade Analyzer flags ------------------------------------
+    parser.add_argument(
+        "--dynasty", action="store_true",
+        help="Dynasty fantasy football trade analyzer (interactive or one-shot)",
+    )
+    parser.add_argument(
+        "--trade", nargs=2, metavar=("SIDE_A", "SIDE_B"),
+        help='Analyze a specific trade, e.g. --trade "CeeDee Lamb, 2026 1st" "Ja\'Marr Chase"',
+    )
+    parser.add_argument(
+        "--roster", type=str, default=None, metavar="CSV",
+        help="CSV file with your dynasty roster (column: player). Triggers roster analysis.",
+    )
+    parser.add_argument(
+        "--market", action="store_true",
+        help="Show dynasty market report: buy/sell targets vs FantasyCalc ADP (use with --dynasty)",
+    )
+    parser.add_argument(
+        "--rankings", action="store_true",
+        help="Show top 50 FantasyCalc dynasty rankings side-by-side with model values",
+    )
+    parser.add_argument(
+        "--num-qbs", type=int, default=1, choices=[1, 2],
+        help="Number of starting QBs in your dynasty league (default: 1)",
+    )
+    parser.add_argument(
+        "--ppr", type=float, default=1.0, choices=[0.0, 0.5, 1.0],
+        help="PPR scoring: 1.0=PPR, 0.5=half-PPR, 0.0=standard (default: 1.0)",
+    )
+    parser.add_argument(
+        "--league-format", type=str, default="1QB",
+        choices=["1QB", "2QB", "SF"],
+        help="Dynasty league format for roster analysis (default: 1QB)",
+    )
+
     # Mode flags
     parser.add_argument(
         "--auto", action="store_true",
@@ -291,6 +339,33 @@ def main() -> None:
     parser.add_argument("--year", type=int, default=None)
 
     args = parser.parse_args()
+
+    # ------------------------------------------------------------------
+    # DYNASTY TRADE ANALYZER
+    # ------------------------------------------------------------------
+    if args.dynasty or args.trade or args.market or args.rankings or args.roster:
+        from dynasty_trade import (
+            run_interactive,
+            analyze_trade_from_args,
+            analyze_roster_from_csv,
+            print_market_analysis,
+            print_full_market_rankings,
+        )
+
+        if args.trade:
+            analyze_trade_from_args(
+                args.trade[0], args.trade[1],
+                label_a="Team A", label_b="Team B",
+            )
+        elif args.roster:
+            analyze_roster_from_csv(args.roster, league_format=args.league_format)
+        elif args.market:
+            print_market_analysis(num_qbs=args.num_qbs, ppr=args.ppr)
+        elif args.rankings:
+            print_full_market_rankings(num_qbs=args.num_qbs, ppr=args.ppr)
+        else:
+            run_interactive()
+        return
 
     # ------------------------------------------------------------------
     # Setup (sample data)
