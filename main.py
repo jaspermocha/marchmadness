@@ -270,17 +270,17 @@ def main() -> None:
         help="Show top 50 FantasyCalc dynasty rankings side-by-side with model values",
     )
     parser.add_argument(
-        "--num-qbs", type=int, default=1, choices=[1, 2],
-        help="Number of starting QBs in your dynasty league (default: 1)",
+        "--num-qbs", type=int, default=2, choices=[1, 2],
+        help="Number of starting QBs in your dynasty league (default: 2)",
     )
     parser.add_argument(
         "--ppr", type=float, default=1.0, choices=[0.0, 0.5, 1.0],
-        help="PPR scoring: 1.0=PPR, 0.5=half-PPR, 0.0=standard (default: 1.0)",
+        help="PPR scoring: 1.0=PPR, 0.5=half-PPR, 0.0=standard (default: 1.0 full PPR)",
     )
     parser.add_argument(
-        "--league-format", type=str, default="1QB",
+        "--league-format", type=str, default="2QB",
         choices=["1QB", "2QB", "SF"],
-        help="Dynasty league format for roster analysis (default: 1QB)",
+        help="Dynasty league format for roster analysis (default: 2QB)",
     )
 
     # Mode flags

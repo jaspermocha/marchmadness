@@ -69,8 +69,8 @@ class Player:
         else:
             return 0.05
 
-    def adjusted_value(self) -> int:
-        """Dynasty value adjusted for age, situation, and injury risk."""
+    def adjusted_value(self, league_format: str = "2QB") -> int:
+        """Dynasty value adjusted for age, situation, injury risk, and league format."""
         val = self.dynasty_value
         val *= self.age_multiplier()
         # Situation adjustment
@@ -79,6 +79,9 @@ class Player:
         # Injury risk discount
         inj_mult = {"low": 1.0, "medium": 0.92, "high": 0.82}
         val *= inj_mult.get(self.injury_risk, 1.0)
+        # 2QB leagues: QBs fill a scarce second starting slot
+        if self.position == "QB" and league_format in ("2QB", "SF"):
+            val *= QB_2QB_MULT
         return int(val)
 
 
@@ -113,9 +116,27 @@ class DraftPick:
     def position(self) -> str:
         return "PICK"
 
-    def adjusted_value(self) -> int:
+    def adjusted_value(self, league_format: str = "2QB") -> int:
         return self.value()
 
+
+# ---------------------------------------------------------------------------
+# League Configuration  (your specific league settings)
+# ---------------------------------------------------------------------------
+
+LEAGUE_CONFIG = {
+    "teams":         12,
+    "num_qbs":       2,       # 2QB format
+    "ppr":           1.0,     # Full PPR
+    "te_premium":    False,   # No TE premium scoring
+    "format":        "2QB",
+    # Starters: QB QB RB RB WR WR WR TE FLEX FLEX
+    "starters": {"QB": 2, "RB": 2, "WR": 3, "TE": 1, "FLEX": 2},
+}
+
+# In 2QB leagues QBs fill a scarce second starting slot — value jumps ~38%.
+# Applied on top of age/situation adjustments.
+QB_2QB_MULT = 1.38
 
 # ---------------------------------------------------------------------------
 # Age Curves by Position
@@ -229,8 +250,8 @@ class TradeAsset:
     def position(self) -> str:
         return self.asset.position
 
-    def value(self) -> int:
-        return self.asset.adjusted_value()
+    def value(self, league_format: str = "2QB") -> int:
+        return self.asset.adjusted_value(league_format)
 
 
 @dataclass
@@ -238,8 +259,8 @@ class TradeSide:
     label: str
     assets: list[TradeAsset] = field(default_factory=list)
 
-    def total_value(self) -> int:
-        return sum(a.value() for a in self.assets)
+    def total_value(self, league_format: str = "2QB") -> int:
+        return sum(a.value(league_format) for a in self.assets)
 
     def positions(self) -> list[str]:
         return [a.position for a in self.assets]
@@ -251,9 +272,10 @@ class TradeSide:
 
 class TradeEvaluator:
 
-    def evaluate(self, side_a: TradeSide, side_b: TradeSide) -> dict:
-        val_a = side_a.total_value()
-        val_b = side_b.total_value()
+    def evaluate(self, side_a: TradeSide, side_b: TradeSide,
+                 league_format: str = "2QB") -> dict:
+        val_a = side_a.total_value(league_format)
+        val_b = side_b.total_value(league_format)
         total = max(val_a + val_b, 1)
         diff = val_a - val_b
         pct_diff = abs(diff) / max(val_a, val_b) * 100
@@ -327,21 +349,42 @@ class TradeEvaluator:
 # Roster Analyzer
 # ---------------------------------------------------------------------------
 
+# Starter counts per format: positional starters only (FLEX counted separately)
 ROSTER_POSITIONS = {
-    "1QB": {"QB": 1, "RB": 4, "WR": 6, "TE": 1},
-    "SF":  {"QB": 1, "RB": 4, "WR": 6, "TE": 1, "SF": 1},
-    "2QB": {"QB": 2, "RB": 4, "WR": 6, "TE": 1},
+    "1QB": {"QB": 1, "RB": 2, "WR": 3, "TE": 1, "FLEX": 1},
+    "SF":  {"QB": 1, "RB": 2, "WR": 3, "TE": 1, "FLEX": 1, "SF": 1},
+    "2QB": {"QB": 2, "RB": 2, "WR": 3, "TE": 1, "FLEX": 2},   # your league
 }
+
+# Minimum usable adjusted value to be considered "startable" in a 12-team league
+STARTABLE_THRESHOLD = {
+    "QB": 5500,   # 2QB: QB2 in weak league ~5500
+    "RB": 3500,   # RB3/FLEX floor
+    "WR": 3500,   # WR4/FLEX floor
+    "TE": 2800,   # TE1 with no premium; competes on raw PPR output only
+}
+
 
 class RosterAnalyzer:
 
-    def analyze(self, roster: list[Player], league_format: str = "1QB") -> dict:
+    def analyze(self, roster: list[Player],
+                league_format: str = "2QB",
+                te_premium: bool = False) -> dict:
+        """
+        Analyze roster health for a 12-team 2QB full PPR no-TE-premium league.
+
+        te_premium=False (your league): TEs are valued purely on PPR output and
+        compete with WRs/RBs for FLEX spots — no positional scarcity bonus.
+        """
         by_pos: dict[str, list[Player]] = {"QB": [], "RB": [], "WR": [], "TE": []}
         for p in roster:
             by_pos.setdefault(p.position, []).append(p)
 
         for pos in by_pos:
-            by_pos[pos].sort(key=lambda p: p.adjusted_value(), reverse=True)
+            by_pos[pos].sort(key=lambda p: p.adjusted_value(league_format), reverse=True)
+
+        fmt = ROSTER_POSITIONS.get(league_format, ROSTER_POSITIONS["2QB"])
+        num_flex = fmt.get("FLEX", 0)
 
         depth: dict[str, str] = {}
         needs: list[str] = []
@@ -349,49 +392,74 @@ class RosterAnalyzer:
         sell_high: list[str] = []
         buy_low: list[str] = []
 
-        starter_counts = {"QB": 1 if league_format == "1QB" else 2, "RB": 2, "WR": 3, "TE": 1}
-
         for pos, players in by_pos.items():
-            starters = players[:starter_counts.get(pos, 2)]
-            depth_players = players[starter_counts.get(pos, 2):]
+            num_starters = fmt.get(pos, 1)
+            threshold = STARTABLE_THRESHOLD.get(pos, 3500)
 
-            starter_avg = sum(p.adjusted_value() for p in starters) / max(len(starters), 1)
-            depth_avg   = sum(p.adjusted_value() for p in depth_players) / max(len(depth_players), 1)
-            count = len(players)
+            starters = players[:num_starters]
+            bench = players[num_starters:]
 
-            if pos == "QB" and league_format == "1QB":
-                if count == 0 or (starters and starters[0].adjusted_value() < 4000):
+            starter_avg = (
+                sum(p.adjusted_value(league_format) for p in starters) / max(len(starters), 1)
+                if starters else 0
+            )
+            startable_bench = [p for p in bench if p.adjusted_value(league_format) >= threshold]
+
+            # TE with no premium: lower the need bar — you just need one reliable TE;
+            # extra TEs rarely win FLEX spots vs. elite WR/RB depth.
+            if pos == "TE" and not te_premium:
+                te_floor = STARTABLE_THRESHOLD["TE"]
+                if not starters or starters[0].adjusted_value(league_format) < te_floor:
                     needs.append(pos)
                     depth[pos] = "NEED"
-                elif starter_avg > 7000 and count >= 2:
+                else:
+                    # Surplus only if you have 2+ startable TEs and don't need them
+                    if len(startable_bench) >= 1 and starter_avg > 5000:
+                        surpluses.append(pos)
+                        depth[pos] = "SURPLUS"
+                    else:
+                        depth[pos] = "OK"
+
+            elif pos == "QB":
+                # 2QB: need 2 real starters
+                if len([p for p in players if p.adjusted_value(league_format) >= threshold]) < num_starters:
+                    needs.append(pos)
+                    depth[pos] = "NEED"
+                elif starter_avg > 9000 and len(startable_bench) >= 1:
                     surpluses.append(pos)
                     depth[pos] = "SURPLUS"
                 else:
                     depth[pos] = "OK"
+
             else:
-                if count < starter_counts.get(pos, 2):
+                # RB / WR — account for FLEX slots (each pos can absorb ~1 flex on avg)
+                effective_need = num_starters + max(0, num_flex - 1)  # conservative
+                total_startable = len([p for p in players if p.adjusted_value(league_format) >= threshold])
+
+                if total_startable < num_starters:
                     needs.append(pos)
                     depth[pos] = "NEED"
-                elif count >= starter_counts.get(pos, 2) + 3 and depth_avg > 3000:
+                elif total_startable >= effective_need + 2 and len(startable_bench) >= 2:
                     surpluses.append(pos)
                     depth[pos] = "SURPLUS"
                 else:
                     depth[pos] = "OK"
 
-            # Sell-high: players near peak_end, high current value
+            # Sell-high: entering decline window with meaningful current value
             for p in players:
                 curve = POSITION_AGE_CURVES[p.position]
                 near_decline = p.age >= curve["peak_end"] - 1
-                if near_decline and p.adjusted_value() > 4000:
+                val_floor = 5000 if p.position == "QB" else 3800
+                if near_decline and p.adjusted_value(league_format) > val_floor:
                     sell_high.append(p.name)
 
-            # Buy-low: young players with upside in bad situations
+            # Buy-low: young talent in limited role that could break out
             for p in players:
                 if p.tier <= 2 and p.age <= 24 and p.situation in ("handcuff", "backup"):
                     buy_low.append(p.name)
 
-        roster_value = sum(p.adjusted_value() for p in roster)
-        age_score = self._age_score(roster)
+        roster_value = sum(p.adjusted_value(league_format) for p in roster)
+        age_score = self._age_score(roster, league_format)
 
         return {
             "roster_value": roster_value,
@@ -405,19 +473,18 @@ class RosterAnalyzer:
             "by_position": {pos: [p.name for p in plist] for pos, plist in by_pos.items()},
         }
 
-    def _age_score(self, roster: list[Player]) -> float:
+    def _age_score(self, roster: list[Player], league_format: str = "2QB") -> float:
         """0-100: 100 = very young (rebuild), 0 = very old (win-now)."""
         if not roster:
             return 50.0
         weighted_ages = []
         for p in roster:
-            weight = p.adjusted_value() / 1000
+            weight = p.adjusted_value(league_format) / 1000
             weighted_ages.append(p.age * weight)
-        total_weight = sum(p.adjusted_value() / 1000 for p in roster)
+        total_weight = sum(p.adjusted_value(league_format) / 1000 for p in roster)
         if total_weight == 0:
             return 50.0
         avg_age = sum(weighted_ages) / total_weight
-        # 23 → 90 (very young), 30 → 20 (older), scale linearly
         score = max(0, min(100, (30 - avg_age) / 7 * 70 + 20))
         return round(score, 1)
 
@@ -441,7 +508,8 @@ class TradeRecommender:
     def recommend(
         self,
         roster: list[Player],
-        league_format: str = "1QB",
+        league_format: str = "2QB",
+        te_premium: bool = False,
         top_n: int = 5,
     ) -> list[dict]:
         """
@@ -449,7 +517,7 @@ class TradeRecommender:
         Returns a list of recommended trades.
         """
         analyzer = RosterAnalyzer()
-        analysis = analyzer.analyze(roster, league_format)
+        analysis = analyzer.analyze(roster, league_format, te_premium=te_premium)
         needs = analysis["needs"]
         surpluses = analysis["surpluses"]
         sell_high = analysis["sell_high_candidates"]
@@ -469,20 +537,20 @@ class TradeRecommender:
                     if p.position == need_pos and p.name.lower() not in roster_names
                     and p.tier <= 2
                 ]
-                surplus_players.sort(key=lambda p: p.adjusted_value(), reverse=True)
-                target_players.sort(key=lambda p: p.adjusted_value(), reverse=True)
+                surplus_players.sort(key=lambda p: p.adjusted_value(league_format), reverse=True)
+                target_players.sort(key=lambda p: p.adjusted_value(league_format), reverse=True)
 
                 if surplus_players and target_players:
                     give = surplus_players[0]
                     get  = target_players[0]
-                    val_ratio = give.adjusted_value() / max(get.adjusted_value(), 1)
+                    val_ratio = give.adjusted_value(league_format) / max(get.adjusted_value(league_format), 1)
                     recommendations.append({
                         "type": "Need/Surplus",
                         "action": f"Trade {give.name} ({surplus_pos}) for {get.name} ({need_pos})",
                         "give": give.name,
                         "get":  get.name,
-                        "value_give": give.adjusted_value(),
-                        "value_get":  get.adjusted_value(),
+                        "value_give": give.adjusted_value(league_format),
+                        "value_get":  get.adjusted_value(league_format),
                         "fairness": round(val_ratio, 2),
                         "rationale": (
                             f"Your {surplus_pos} depth is strong — convert it to address "
@@ -495,21 +563,22 @@ class TradeRecommender:
             player = next((p for p in roster if p.name == name), None)
             if player is None:
                 continue
+            pval = player.adjusted_value(league_format)
             target_picks = [
                 DraftPick(2026, 1, "early"),
                 DraftPick(2026, 1, "mid"),
                 DraftPick(2027, 1, "early"),
             ]
             for pick in target_picks:
-                if player.adjusted_value() * 0.9 <= pick.value() <= player.adjusted_value() * 1.3:
+                if pval * 0.9 <= pick.value() <= pval * 1.3:
                     recommendations.append({
                         "type": "Sell High",
                         "action": f"Trade {player.name} for a {pick.name}",
                         "give": player.name,
                         "get":  pick.name,
-                        "value_give": player.adjusted_value(),
+                        "value_give": pval,
                         "value_get":  pick.value(),
-                        "fairness": round(pick.value() / max(player.adjusted_value(), 1), 2),
+                        "fairness": round(pick.value() / max(pval, 1), 2),
                         "rationale": (
                             f"{player.name} is {player.age} yrs old and approaching/entering decline. "
                             f"Sell while value is still high and reinvest in draft capital."
@@ -526,7 +595,7 @@ class TradeRecommender:
                     "give": "(varies)",
                     "get":  player.name,
                     "value_give": None,
-                    "value_get":  player.adjusted_value(),
+                    "value_get":  player.adjusted_value(league_format),
                     "fairness": None,
                     "rationale": (
                         f"{player.name} ({player.position}, age {player.age}) has elite upside "
@@ -596,9 +665,10 @@ def _bar(value: int, max_val: int = 10000, width: int = 20) -> str:
     return "[" + "█" * filled + "░" * (width - filled) + "]"
 
 
-def print_trade_analysis(side_a: TradeSide, side_b: TradeSide) -> None:
+def print_trade_analysis(side_a: TradeSide, side_b: TradeSide,
+                         league_format: str = "2QB") -> None:
     evaluator = TradeEvaluator()
-    result = evaluator.evaluate(side_a, side_b)
+    result = evaluator.evaluate(side_a, side_b, league_format)
 
     print("\n" + "═" * 60)
     print("  DYNASTY TRADE ANALYZER")
@@ -608,23 +678,24 @@ def print_trade_analysis(side_a: TradeSide, side_b: TradeSide) -> None:
         print(f"\n  {label}:")
         for asset in side.assets:
             a = asset.asset
+            v = asset.value(league_format)
             if isinstance(a, Player):
                 peak_left, total_left = a.buy_window()
                 print(
                     f"    {a.name:<25} {a.position:<3}  "
                     f"Age {a.age:.0f}  "
-                    f"Val {asset.value():>5}  "
-                    f"{_bar(asset.value())}  "
+                    f"Val {v:>5}  "
+                    f"{_bar(v)}  "
                     f"~{peak_left}yr peak / {total_left}yr window"
                 )
             else:
                 print(
                     f"    {a.name:<25} PICK  "
-                    f"Val {asset.value():>5}  "
-                    f"{_bar(asset.value())}"
+                    f"Val {v:>5}  "
+                    f"{_bar(v)}"
                 )
         print(f"    {'─'*55}")
-        print(f"    {'TOTAL VALUE':>30}  {side.total_value():>5}")
+        print(f"    {'TOTAL VALUE':>30}  {side.total_value(league_format):>5}")
 
     print("\n  " + "─" * 56)
     val_a, val_b = result["side_a_value"], result["side_b_value"]
@@ -643,9 +714,9 @@ def print_trade_analysis(side_a: TradeSide, side_b: TradeSide) -> None:
     print("\n" + "═" * 60 + "\n")
 
 
-def print_roster_analysis(analysis: dict, league_format: str = "1QB") -> None:
+def print_roster_analysis(analysis: dict, league_format: str = "2QB") -> None:
     print("\n" + "═" * 60)
-    print(f"  ROSTER ANALYSIS  ({league_format})")
+    print(f"  ROSTER ANALYSIS  ({league_format}, Full PPR, No TE Premium, 12-Team)")
     print("═" * 60)
     print(f"  Total Roster Value : {analysis['roster_value']:,}")
     print(f"  Team Age Score     : {analysis['age_score']} / 100")
@@ -771,10 +842,11 @@ class MarketComparison:
 
 
 def find_undervalued_players(
-    num_qbs: int = 1,
+    num_qbs: int = 2,
     ppr: float = 1.0,
     top_n: int = 20,
     min_value: int = 1500,
+    league_format: str = "2QB",
 ) -> tuple[list[MarketComparison], list[MarketComparison]]:
     """
     Compare internal model values against FantasyCalc market values.
@@ -807,7 +879,7 @@ def find_undervalued_players(
             else:
                 continue
 
-        model_val = player.adjusted_value()
+        model_val = player.adjusted_value(league_format)
         delta = model_val - mkt_value
         if mkt_value == 0:
             continue
@@ -836,13 +908,14 @@ def find_undervalued_players(
 
 
 def print_market_analysis(
-    num_qbs: int = 1,
+    num_qbs: int = 2,
     ppr: float = 1.0,
     top_n: int = 15,
+    league_format: str = "2QB",
 ) -> None:
-    print(f"\nFetching FantasyCalc dynasty values ({'1QB' if num_qbs == 1 else f'{num_qbs}QB'}, {'PPR' if ppr == 1 else 'Half-PPR' if ppr == 0.5 else 'Standard'})...")
+    print(f"\nFetching FantasyCalc dynasty values ({num_qbs}QB, {'PPR' if ppr == 1 else 'Half-PPR' if ppr == 0.5 else 'Standard'}, No TE Premium)...")
     undervalued, overvalued = find_undervalued_players(
-        num_qbs=num_qbs, ppr=ppr, top_n=top_n
+        num_qbs=num_qbs, ppr=ppr, top_n=top_n, league_format=league_format
     )
 
     if not undervalued and not overvalued:
@@ -892,7 +965,8 @@ def print_market_analysis(
     print("  injury risk, and usage situation. Positive Δ = market sleeping on player.\n")
 
 
-def print_full_market_rankings(num_qbs: int = 1, ppr: float = 1.0, top_n: int = 50) -> None:
+def print_full_market_rankings(num_qbs: int = 2, ppr: float = 1.0, top_n: int = 50,
+                               league_format: str = "2QB") -> None:
     """Print top N players from FantasyCalc with our model value side-by-side."""
     print(f"\nFetching top {top_n} dynasty players from FantasyCalc...")
     fc_data = fetch_fantasycalc_values(num_qbs=num_qbs, ppr=ppr)
@@ -910,7 +984,7 @@ def print_full_market_rankings(num_qbs: int = 1, ppr: float = 1.0, top_n: int = 
             matches = [p for k, p in PLAYER_DB.items() if fc_name in k or k in fc_name]
             player = matches[0] if len(matches) == 1 else None
 
-        model_val = player.adjusted_value() if player else "—"
+        model_val = player.adjusted_value(league_format) if player else "—"
         age = player.age if player else (entry.get("age") or "?")
         adp = entry.get("adp")
 
@@ -979,11 +1053,11 @@ def run_interactive() -> None:
             print_market_analysis(num_qbs=num_qbs, ppr=ppr)
 
         elif choice == "5":
-            fmt = input("  League format [1QB/2QB] (default 1QB): ").strip() or "1QB"
+            fmt = input("  League format [1QB/2QB] (default 2QB): ").strip() or "2QB"
             num_qbs = 2 if fmt == "2QB" else 1
             ppr_raw = input("  Scoring [ppr/half/std] (default ppr): ").strip() or "ppr"
             ppr = {"ppr": 1.0, "half": 0.5, "std": 0.0}.get(ppr_raw, 1.0)
-            print_full_market_rankings(num_qbs=num_qbs, ppr=ppr)
+            print_full_market_rankings(num_qbs=num_qbs, ppr=ppr, league_format=fmt)
 
 
 def _interactive_trade() -> None:
@@ -1026,7 +1100,7 @@ def _interactive_trade() -> None:
         print("  Error: Both sides must have at least one valid asset.\n")
         return
 
-    print_trade_analysis(side_a, side_b)
+    print_trade_analysis(side_a, side_b, league_format="2QB")
 
 
 def _interactive_roster() -> None:
@@ -1036,9 +1110,9 @@ def _interactive_roster() -> None:
     if raw.lower() == "quit":
         return
 
-    fmt = input("  League format [1QB/2QB/SF] (default 1QB): ").strip() or "1QB"
+    fmt = input("  League format [1QB/2QB/SF] (default 2QB): ").strip() or "2QB"
     if fmt not in ROSTER_POSITIONS:
-        fmt = "1QB"
+        fmt = "2QB"
 
     roster: list[Player] = []
     unmatched = []
@@ -1057,11 +1131,11 @@ def _interactive_roster() -> None:
         return
 
     analyzer = RosterAnalyzer()
-    analysis = analyzer.analyze(roster, fmt)
+    analysis = analyzer.analyze(roster, fmt, te_premium=False)
     print_roster_analysis(analysis, fmt)
 
     recommender = TradeRecommender()
-    recs = recommender.recommend(roster, fmt)
+    recs = recommender.recommend(roster, fmt, te_premium=False)
     print_recommendations(recs)
 
 
@@ -1080,7 +1154,7 @@ def _interactive_lookup() -> None:
     print(f"    Dynasty Rank : #{p.dynasty_rank} overall  /  #{p.positional_rank} at {p.position}")
     print(f"    Recent PPG   : {p.recent_ppg}")
     print(f"    Base Value   : {p.dynasty_value:,}")
-    print(f"    Adj. Value   : {p.adjusted_value():,}  (age/situation/injury adjusted)")
+    print(f"    Adj. Value   : {p.adjusted_value('2QB'):,}  (2QB/PPR, age/situation/injury adjusted)")
     print(f"    Age Mult     : {p.age_multiplier():.2f}")
     print(f"    Buy Window   : ~{peak_left} yrs in peak, {total_left} yrs total")
     print(f"    Injury Risk  : {p.injury_risk}")
@@ -1118,12 +1192,12 @@ def analyze_trade_from_args(side_a_str: str, side_b_str: str,
         print(f"Warning: Could not find: {', '.join(unmatched)}")
 
     if side_a.assets and side_b.assets:
-        print_trade_analysis(side_a, side_b)
+        print_trade_analysis(side_a, side_b, league_format="2QB")
     else:
         print("Error: Both sides must have at least one valid asset.")
 
 
-def analyze_roster_from_csv(csv_path: str, league_format: str = "1QB") -> None:
+def analyze_roster_from_csv(csv_path: str, league_format: str = "2QB") -> None:
     """Load roster from a CSV with a 'player' column."""
     import csv
     roster: list[Player] = []
@@ -1140,9 +1214,9 @@ def analyze_roster_from_csv(csv_path: str, league_format: str = "1QB") -> None:
         return
 
     analyzer = RosterAnalyzer()
-    analysis = analyzer.analyze(roster, league_format)
+    analysis = analyzer.analyze(roster, league_format, te_premium=False)
     print_roster_analysis(analysis, league_format)
 
     recommender = TradeRecommender()
-    recs = recommender.recommend(roster, league_format)
+    recs = recommender.recommend(roster, league_format, te_premium=False)
     print_recommendations(recs)
