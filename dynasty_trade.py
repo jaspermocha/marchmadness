@@ -152,75 +152,94 @@ POSITION_AGE_CURVES = {
 PICK_BASE_VALUES = {1: 4800, 2: 2200, 3: 1100, 4: 550, 5: 280}
 
 # ---------------------------------------------------------------------------
-# Player Database  (KTC-calibrated values as of 2026 offseason)
+# Player Database  (updated for 2026 offseason — ages as of March 2026)
+# ---------------------------------------------------------------------------
+# dynasty_value = 1QB/base scale (0-10000). QB 2QB multiplier applied separately.
+# 2024 draft class = yrs_pro 2 (entering yr 3).  2025 draft class = yrs_pro 1.
 # ---------------------------------------------------------------------------
 
 def build_player_db() -> dict[str, Player]:
     raw = [
         # name, pos, team, age, yrs_pro, dynasty_rank, pos_rank, ppg, value, tier, injury, situation
-        ("CeeDee Lamb",       "WR", "DAL",  25, 5,  1,  1, 25.1, 9800, 1, "low",    "starter"),
-        ("Ja'Marr Chase",     "WR", "CIN",  25, 4,  2,  2, 24.3, 9600, 1, "low",    "starter"),
-        ("Justin Jefferson",  "WR", "MIN",  26, 5,  3,  3, 22.8, 9300, 1, "low",    "starter"),
-        ("Amon-Ra St. Brown", "WR", "DET",  25, 4,  4,  4, 22.2, 8700, 1, "low",    "starter"),
-        ("Puka Nacua",        "WR", "LAR",  24, 2,  5,  5, 19.5, 7900, 1, "low",    "starter"),
-        ("Garrett Wilson",    "WR", "NYJ",  24, 3,  6,  6, 18.8, 7700, 1, "low",    "starter"),
-        ("Drake London",      "WR", "ATL",  23, 3,  7,  7, 17.2, 7200, 1, "low",    "starter"),
-        ("Stefon Diggs",      "WR", "NE",   32, 10, 55, 22,  9.1, 3100, 3, "medium", "starter"),
-        ("Tyreek Hill",       "WR", "MIA",  32, 9,  60, 24, 19.8, 3500, 3, "low",    "starter"),
-        ("Cooper Kupp",       "WR", "LAR",  32, 8,  70, 28,  8.2, 2400, 4, "high",   "starter"),
-        ("Davante Adams",     "WR", "LV",   33, 11, 80, 30, 12.5, 2000, 4, "medium", "starter"),
-        ("DeVonta Smith",     "WR", "PHI",  28, 4,  15, 10, 16.3, 6800, 2, "low",    "starter"),
-        ("Tee Higgins",       "WR", "CIN",  26, 5,  18, 11, 15.1, 6400, 2, "medium", "starter"),
-        ("Chris Olave",       "WR", "NO",   24, 3,  12, 8,  17.0, 7100, 1, "high",   "starter"),
-        ("Jordan Addison",    "WR", "MIN",  23, 2,  16, 9,  14.8, 6500, 2, "low",    "starter"),
-        ("Rome Odunze",       "WR", "CHI",  22, 1,  20, 14, 13.2, 6000, 2, "low",    "starter"),
-        ("Marvin Harrison Jr.","WR","ARI",  22, 1,  14, 9,  15.6, 7000, 1, "low",    "starter"),
-        ("Brian Thomas Jr.",  "WR", "JAX",  22, 1,  22, 15, 14.1, 5800, 2, "low",    "starter"),
-        ("Xavier Worthy",     "WR", "KC",   21, 1,  28, 18, 11.0, 5000, 2, "low",    "starter"),
-        ("Ladd McConkey",     "WR", "LAC",  23, 1,  25, 17, 13.8, 5500, 2, "low",    "starter"),
 
-        # RBs
-        ("Breece Hall",       "RB", "NYJ",  23, 3,  8,  1, 20.5, 8500, 1, "medium", "starter"),
-        ("Bijan Robinson",    "RB", "ATL",  23, 2,  9,  2, 22.1, 8700, 1, "low",    "starter"),
-        ("Jahmyr Gibbs",      "RB", "DET",  23, 2,  10, 3, 21.8, 8600, 1, "low",    "starter"),
-        ("De'Von Achane",     "RB", "MIA",  23, 2,  11, 4, 23.4, 8900, 1, "high",   "starter"),
-        ("Jonathon Brooks",   "RB", "CAR",  22, 1,  13, 5, 11.0, 6200, 2, "high",   "starter"),
-        ("Rashee Rice",       "WR", "KC",   24, 2,  19, 12, 16.0, 6300, 2, "medium", "starter"),
-        ("James Cook",        "RB", "BUF",  24, 3,  17, 6, 18.2, 7200, 2, "low",    "starter"),
-        ("Derrick Henry",     "RB", "BAL",  32, 9,  65, 25, 17.5, 2800, 3, "medium", "starter"),
-        ("Tony Pollard",      "RB", "TEN",  28, 5,  40, 18, 12.1, 4200, 3, "medium", "starter"),
-        ("Josh Jacobs",       "RB", "GB",   27, 5,  35, 15, 14.3, 4800, 3, "low",    "starter"),
-        ("Alvin Kamara",      "RB", "NO",   30, 8,  58, 22, 10.5, 3200, 3, "high",   "starter"),
-        ("Saquon Barkley",    "RB", "PHI",  29, 7,  50, 20, 19.8, 3800, 3, "high",   "starter"),
-        ("Isiah Pacheco",     "RB", "KC",   26, 3,  30, 13, 13.5, 5200, 2, "high",   "starter"),
-        ("Tank Bigsby",       "RB", "JAX",  23, 2,  26, 11, 12.0, 5100, 2, "low",    "starter"),
-        ("Tyjae Spears",      "RB", "TEN",  23, 2,  32, 14, 11.5, 4700, 2, "low",    "handcuff"),
-        ("MarShawn Lloyd",    "RB", "GB",   22, 1,  38, 16, 10.2, 4000, 3, "low",    "handcuff"),
-        ("Ray Davis",         "RB", "BUF",  24, 1,  45, 19, 9.5,  3500, 3, "low",    "handcuff"),
+        # ── WRs ──────────────────────────────────────────────────────────────
+        ("CeeDee Lamb",          "WR", "DAL", 25, 5,  1,  1, 25.1, 9800, 1, "low",    "starter"),
+        ("Ja'Marr Chase",        "WR", "CIN", 25, 4,  2,  2, 24.3, 9600, 1, "low",    "starter"),
+        ("Justin Jefferson",     "WR", "MIN", 26, 5,  3,  3, 22.8, 9200, 1, "low",    "starter"),
+        ("Malik Nabers",         "WR", "NYG", 22, 2,  4,  4, 21.5, 9000, 1, "low",    "starter"),  # 2024 class breakout
+        ("Amon-Ra St. Brown",    "WR", "DET", 26, 4,  5,  5, 22.2, 8600, 1, "low",    "starter"),
+        ("Garrett Wilson",       "WR", "NYJ", 25, 3,  6,  6, 19.5, 8200, 1, "low",    "starter"),
+        ("Marvin Harrison Jr.",  "WR", "ARI", 23, 2,  7,  7, 17.5, 8000, 1, "low",    "starter"),  # 2024 class yr2
+        ("Puka Nacua",           "WR", "LAR", 25, 2,  8,  8, 19.0, 7800, 1, "medium", "starter"),
+        ("Drake London",         "WR", "ATL", 25, 3,  9,  9, 18.2, 7600, 1, "low",    "starter"),
+        ("Brian Thomas Jr.",     "WR", "JAX", 24, 2, 10, 10, 17.5, 7400, 1, "low",    "starter"),  # 2024 class yr2
+        ("Tetairoa McMillan",    "WR", "CAR", 22, 1, 11, 11, 14.5, 7200, 1, "low",    "starter"),  # 2025 rookie
+        ("Jordan Addison",       "WR", "MIN", 24, 3, 12, 12, 15.5, 6900, 2, "low",    "starter"),
+        ("Rome Odunze",          "WR", "CHI", 24, 2, 13, 13, 15.8, 6800, 2, "low",    "starter"),  # 2024 class yr2
+        ("Chris Olave",          "WR", "NO",  26, 4, 14, 14, 17.0, 6500, 2, "high",   "starter"),
+        ("Travis Hunter",        "WR", "DEN", 22, 1, 15, 15, 13.5, 6200, 2, "low",    "starter"),  # 2025 rookie, 2-way
+        ("Ladd McConkey",        "WR", "LAC", 24, 2, 16, 16, 17.0, 6200, 2, "low",    "starter"),
+        ("Emeka Egbuka",         "WR", "TB",  23, 1, 17, 17, 13.2, 5900, 2, "low",    "starter"),  # 2025 rookie
+        ("DeVonta Smith",        "WR", "PHI", 27, 4, 18, 18, 16.3, 5800, 2, "low",    "starter"),
+        ("Keon Coleman",         "WR", "BUF", 23, 2, 19, 19, 12.5, 5600, 2, "low",    "starter"),  # 2024 class yr2
+        ("Tee Higgins",          "WR", "CIN", 27, 5, 20, 20, 15.1, 5500, 2, "medium", "starter"),
+        ("Xavier Worthy",        "WR", "KC",  22, 2, 21, 21, 13.0, 5200, 2, "low",    "starter"),
+        ("Luther Burden III",    "WR", "CHI", 22, 1, 22, 22, 11.5, 5000, 2, "low",    "starter"),  # 2025 rookie
+        ("Rashee Rice",          "WR", "KC",  25, 3, 23, 23, 13.5, 4800, 2, "medium", "starter"),  # legal/injury history
+        ("Tyreek Hill",          "WR", "MIA", 32, 9, 55, 40, 17.8, 2800, 3, "low",    "starter"),
+        ("Davante Adams",        "WR", "NYJ", 33, 11, 72, 44,  9.5, 1400, 4, "medium", "starter"),
+        ("Cooper Kupp",          "WR", "LAR", 32, 8,  78, 47,  7.0,  800, 4, "high",   "starter"),
 
-        # QBs
-        ("Patrick Mahomes",   "QB", "KC",   30, 7,  23, 1, 28.5, 7800, 1, "low",    "starter"),
-        ("Josh Allen",        "QB", "BUF",  30, 7,  24, 2, 30.1, 7500, 1, "low",    "starter"),
-        ("Lamar Jackson",     "QB", "BAL",  29, 7,  27, 3, 31.2, 7200, 1, "low",    "starter"),
-        ("Jalen Hurts",       "QB", "PHI",  27, 5,  29, 4, 27.8, 7000, 1, "medium", "starter"),
-        ("C.J. Stroud",       "QB", "HOU",  23, 2,  31, 5, 22.5, 7800, 1, "low",    "starter"),
-        ("Caleb Williams",    "QB", "CHI",  24, 1,  34, 6, 18.5, 7200, 1, "low",    "starter"),
-        ("Anthony Richardson","QB", "IND",  23, 2,  36, 7, 17.5, 6800, 2, "high",   "starter"),
-        ("Drake Maye",        "QB", "NE",   23, 1,  39, 8, 16.5, 6500, 2, "low",    "starter"),
-        ("Joe Burrow",        "QB", "CIN",  29, 4,  33, 5, 25.5, 6800, 2, "high",   "starter"),
-        ("Dak Prescott",      "QB", "DAL",  32, 10, 62, 14, 21.5, 3800, 3, "high",   "starter"),
-        ("Tua Tagovailoa",    "QB", "MIA",  28, 5,  44, 10, 22.1, 5200, 2, "high",   "starter"),
+        # ── RBs ──────────────────────────────────────────────────────────────
+        ("Bijan Robinson",       "RB", "ATL", 23, 3,  1,  1, 22.1, 9000, 1, "low",    "starter"),
+        ("Jahmyr Gibbs",         "RB", "DET", 23, 3,  2,  2, 21.8, 8900, 1, "low",    "starter"),
+        ("De'Von Achane",        "RB", "MIA", 23, 3,  3,  3, 21.5, 8500, 1, "high",   "starter"),
+        ("Ashton Jeanty",        "RB", "LV",  22, 1,  4,  4, 19.5, 8500, 1, "medium", "starter"),  # 2025 top-5 pick
+        ("Breece Hall",          "RB", "NYJ", 24, 4,  5,  5, 20.5, 8000, 1, "medium", "starter"),
+        ("Omarion Hampton",      "RB", "LAC", 22, 1,  6,  6, 15.5, 6800, 2, "low",    "starter"),  # 2025 rookie
+        ("Jonathon Brooks",      "RB", "CAR", 23, 2,  7,  7, 14.5, 6500, 2, "medium", "starter"),  # post-ACL
+        ("James Cook",           "RB", "BUF", 26, 4,  8,  8, 18.2, 6800, 2, "low",    "starter"),
+        ("Quinshon Judkins",     "RB", "CLE", 22, 1,  9,  9, 13.5, 6000, 2, "low",    "starter"),  # 2025 rookie
+        ("Tank Bigsby",          "RB", "JAX", 24, 3, 10, 10, 14.0, 5500, 2, "low",    "starter"),
+        ("Tyjae Spears",         "RB", "TEN", 24, 3, 11, 11, 14.5, 5200, 2, "low",    "starter"),
+        ("Isiah Pacheco",        "RB", "KC",  27, 4, 12, 12, 13.5, 4800, 2, "high",   "starter"),
+        ("TreVeyon Henderson",   "RB", "NE",  24, 1, 13, 13, 12.0, 4500, 2, "low",    "starter"),  # 2025 rookie
+        ("MarShawn Lloyd",       "RB", "GB",  24, 2, 14, 14, 12.5, 4200, 2, "low",    "starter"),
+        ("Ray Davis",            "RB", "BUF", 25, 2, 15, 15, 10.5, 3800, 3, "low",    "handcuff"),
+        ("Josh Jacobs",          "RB", "GB",  28, 6, 16, 16, 14.3, 3800, 3, "low",    "starter"),
+        ("Saquon Barkley",       "RB", "PHI", 29, 8, 17, 17, 20.5, 3800, 3, "high",   "starter"),
+        ("Tony Pollard",         "RB", "TEN", 29, 6, 18, 18, 10.0, 2200, 3, "medium", "starter"),
+        ("Derrick Henry",        "RB", "BAL", 32, 10, 19, 19, 14.5, 1600, 4, "medium", "starter"),
+        ("Alvin Kamara",         "RB", "NO",  31, 9, 20, 20,  9.0, 1200, 4, "high",   "starter"),
 
-        # TEs
-        ("Sam LaPorta",       "TE", "DET",  24, 2,  21, 1, 16.8, 8200, 1, "medium", "starter"),
-        ("Brock Bowers",      "TE", "LV",   22, 1,  6,  1, 19.5, 9200, 1, "low",    "starter"),
-        ("Trey McBride",      "TE", "ARI",  25, 3,  13, 2, 17.2, 8000, 1, "low",    "starter"),
-        ("Dalton Kincaid",    "TE", "BUF",  25, 2,  37, 6, 10.5, 5000, 2, "medium", "starter"),
-        ("Ja'Tavion Sanders", "TE", "CAR",  23, 1,  42, 7, 9.8,  4500, 2, "low",    "starter"),
-        ("Tucker Kraft",      "TE", "GB",   24, 2,  46, 8, 9.2,  4200, 2, "low",    "starter"),
-        ("Luke Musgrave",     "TE", "GB",   24, 2,  48, 9, 8.8,  3900, 3, "high",   "starter"),
-        ("Travis Kelce",      "TE", "KC",   36, 13, 90, 20, 13.5, 1500, 4, "medium", "starter"),
-        ("Mark Andrews",      "TE", "BAL",  30, 6,  52, 12, 12.5, 3500, 3, "medium", "starter"),
+        # ── QBs  (dynasty_value = pre-2QB-mult base) ─────────────────────────
+        ("Josh Allen",           "QB", "BUF", 29, 7,  1,  1, 32.5, 8200, 1, "low",    "starter"),
+        ("Lamar Jackson",        "QB", "BAL", 29, 7,  2,  2, 33.5, 8200, 1, "low",    "starter"),
+        ("Jayden Daniels",       "QB", "WAS", 24, 2,  3,  3, 29.5, 8500, 1, "low",    "starter"),  # 2024 breakout
+        ("Patrick Mahomes",      "QB", "KC",  30, 8,  4,  4, 28.0, 7800, 1, "low",    "starter"),
+        ("C.J. Stroud",          "QB", "HOU", 24, 3,  5,  5, 23.5, 7800, 1, "medium", "starter"),
+        ("Caleb Williams",       "QB", "CHI", 24, 2,  6,  6, 23.5, 7500, 1, "low",    "starter"),
+        ("Cam Ward",             "QB", "TEN", 23, 1,  7,  7, 21.5, 7200, 1, "low",    "starter"),  # 2025 #1 overall
+        ("Jalen Hurts",          "QB", "PHI", 27, 6,  8,  8, 26.5, 7000, 1, "medium", "starter"),
+        ("Drake Maye",           "QB", "NE",  24, 2,  9,  9, 21.5, 7200, 2, "low",    "starter"),
+        ("Anthony Richardson",   "QB", "IND", 23, 3, 10, 10, 20.0, 6200, 2, "high",   "starter"),
+        ("Shedeur Sanders",      "QB", "CLE", 23, 1, 11, 11, 19.5, 6000, 2, "low",    "starter"),  # 2025 rookie
+        ("Jordan Love",          "QB", "GB",  27, 4, 12, 12, 24.5, 6200, 2, "medium", "starter"),
+        ("Bo Nix",               "QB", "DEN", 25, 2, 13, 13, 21.0, 5800, 2, "low",    "starter"),  # 2024 class yr2
+        ("Joe Burrow",           "QB", "CIN", 29, 5, 14, 14, 25.5, 6000, 2, "high",   "starter"),
+        ("Tua Tagovailoa",       "QB", "MIA", 28, 6, 15, 15, 22.0, 5000, 2, "high",   "starter"),
+        ("Dak Prescott",         "QB", "DAL", 32, 11, 16, 16, 21.5, 3200, 3, "high",   "starter"),
+
+        # ── TEs ──────────────────────────────────────────────────────────────
+        ("Brock Bowers",         "TE", "LV",  23, 2,  1,  1, 24.5, 9500, 1, "low",    "starter"),  # record-breaking yr1
+        ("Trey McBride",         "TE", "ARI", 27, 4,  2,  2, 17.2, 8200, 1, "low",    "starter"),
+        ("Sam LaPorta",          "TE", "DET", 25, 3,  3,  3, 16.8, 7800, 1, "medium", "starter"),
+        ("Colston Loveland",     "TE", "CHI", 22, 1,  4,  4, 13.5, 7000, 1, "low",    "starter"),  # 2025 rookie, Bears
+        ("Tucker Kraft",         "TE", "GB",  25, 3,  5,  5, 10.5, 5000, 2, "low",    "starter"),
+        ("Ja'Tavion Sanders",    "TE", "CAR", 24, 2,  6,  6, 11.0, 4800, 2, "low",    "starter"),
+        ("Dalton Kincaid",       "TE", "BUF", 27, 3,  7,  7, 10.5, 4000, 2, "medium", "starter"),
+        ("Luke Musgrave",        "TE", "GB",  25, 3,  8,  8,  9.0, 3600, 3, "high",   "starter"),
+        ("Mark Andrews",         "TE", "BAL", 30, 7,  9,  9, 12.0, 3000, 3, "medium", "starter"),
     ]
 
     db: dict[str, Player] = {}
